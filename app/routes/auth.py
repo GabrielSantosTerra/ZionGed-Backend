@@ -1,7 +1,8 @@
 from __future__ import annotations
+import re
 from fastapi import APIRouter, Depends, HTTPException, status, Response
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session, joinedload
 
 from app.database.connection import get_db
 from app.models import Pessoa, Usuario
@@ -63,28 +64,54 @@ class TokenResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-@router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    user = db.execute(select(Usuario).where(Usuario.email == payload.email)).scalar_one_or_none()
+class LoginInput(BaseModel):
+    user: str
+    senha: str
+
+
+@router.post("/login")
+def login(payload: LoginInput, response: Response, db: Session = Depends(get_db)):
+    u = payload.user.strip()
+    q = None
+
+    if "@" in u:
+        q = select(Usuario).options(joinedload(Usuario.pessoa)).where(Usuario.email == u)
+    else:
+        digits = re.sub(r"\D", "", u)
+        if not digits:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuário inválido")
+        q = (
+            select(Usuario)
+            .options(joinedload(Usuario.pessoa))
+            .join(Pessoa, Usuario.pessoa_id == Pessoa.id)
+            .where(func.regexp_replace(Pessoa.cpf, r"[^0-9]", "", "g") == digits)
+        )
+
+    user = db.execute(q).scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas")
 
-    if not verify_password(payload.password, user.senha_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    if not verify_password(payload.senha, user.senha_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas")
 
-    token = create_access_token(subject=user.id)
-
-    # seta cookie HttpOnly que seu get_current_user já reconhece (session.xaccess)
+    token = create_access_token({"sub": str(user.id)})
     response.set_cookie(
         key="session.xaccess",
         value=token,
         httponly=True,
-        secure=False,     # True em produção com HTTPS
-        samesite="lax",   # ajuste conforme seu frontend
-        max_age=60 * 60,  # 1h
+        samesite="lax",
+        secure=False,
         path="/",
     )
-    return TokenResponse(access_token=token)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "pessoa": {"id": user.pessoa.id, "nome": user.pessoa.nome, "cpf": user.pessoa.cpf} if user.pessoa else None,
+        },
+    }
 
 @router.get("/me")
 def me(user: Usuario = Depends(get_current_user)):
