@@ -1,9 +1,8 @@
-from __future__ import annotations
+# from _future_ import annotations
 import os, base64, hmac, hashlib
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt
-from passlib.context import CryptContext
 
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")

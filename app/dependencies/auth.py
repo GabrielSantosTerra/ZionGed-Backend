@@ -1,11 +1,9 @@
 import os
-import jwt
+from jose import jwt
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
-
 from app.database.connection import get_db
-
 from app.models.auth import Usuario
 
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
@@ -28,7 +26,6 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Usuario
     token = _extract_token(request)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except Exception:
@@ -43,8 +40,6 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Usuario
     user = db.execute(
         select(Usuario).options(joinedload(Usuario.pessoa)).where(Usuario.id == uid)
     ).scalar_one_or_none()
-
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-
     return user

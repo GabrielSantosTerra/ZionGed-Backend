@@ -1,26 +1,26 @@
-from __future__ import annotations
+# from _future_ import annotations
 import re
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session, joinedload
 
+from pydantic import BaseModel, EmailStr
+
 from app.database.connection import get_db
 from app.models import Pessoa, Usuario
-from app.schemas.auth import RegisterIn, RegisterOut, UsuarioOut
-from app.dependencies.auth import get_current_user
+from app.schemas.auth import RegisterIn, RegisterOut
 from app.security.password import hash_password, verify_password, create_access_token
+from app.dependencies.auth import get_current_user
 
 router = APIRouter()
 
 @router.post("/register", response_model=RegisterOut, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterIn, db: Session = Depends(get_db)):
-    # validações de unicidade
     if db.scalar(select(Usuario.id).where(Usuario.email == payload.usuario.email)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="E-mail já cadastrado")
     if payload.pessoa.cpf and db.scalar(select(Pessoa.id).where(Pessoa.cpf == payload.pessoa.cpf)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="CPF já cadastrado")
 
-    # cria Pessoa e Usuario na mesma transação
     pessoa = Pessoa(
         nome=payload.pessoa.nome,
         cpf=payload.pessoa.cpf,
@@ -28,7 +28,7 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)):
         telefone=payload.pessoa.telefone,
     )
     db.add(pessoa)
-    db.flush()  # garante pessoa.id
+    db.flush()
 
     usuario = Usuario(
         pessoa_id=pessoa.id,
@@ -39,41 +39,15 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(pessoa)
     db.refresh(usuario)
-
     return RegisterOut(pessoa=pessoa, usuario=usuario)
-
-# (Opcional) login simples — mantém id int
-from pydantic import BaseModel, EmailStr
-class LoginIn(BaseModel):
-    email: EmailStr
-    senha: str
-
-class MeOut(BaseModel):
-    id: int
-    pessoa_id: int
-    email: EmailStr
-    is_active: bool
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-    model_config = {"from_attributes": True}
 
 class LoginInput(BaseModel):
     user: str
     senha: str
 
-
 @router.post("/login")
 def login(payload: LoginInput, response: Response, db: Session = Depends(get_db)):
     u = payload.user.strip()
-    q = None
-
     if "@" in u:
         q = select(Usuario).options(joinedload(Usuario.pessoa)).where(Usuario.email == u)
     else:
@@ -88,13 +62,11 @@ def login(payload: LoginInput, response: Response, db: Session = Depends(get_db)
         )
 
     user = db.execute(q).scalar_one_or_none()
-    if not user:
+    if not user or not verify_password(payload.senha, user.senha_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas")
 
-    if not verify_password(payload.senha, user.senha_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas")
+    token = create_access_token(user.id)
 
-    token = create_access_token({"sub": str(user.id)})
     response.set_cookie(
         key="session.xaccess",
         value=token,
@@ -109,13 +81,16 @@ def login(payload: LoginInput, response: Response, db: Session = Depends(get_db)
         "user": {
             "id": user.id,
             "email": user.email,
-            "pessoa": {"id": user.pessoa.id, "nome": user.pessoa.nome, "cpf": user.pessoa.cpf} if user.pessoa else None,
+            "pessoa": {
+                "id": user.pessoa.id,
+                "nome": user.pessoa.nome,
+                "cpf": user.pessoa.cpf
+            } if user.pessoa else None,
         },
     }
 
 @router.get("/me")
 def me(user: Usuario = Depends(get_current_user)):
-    # ajuste o shape conforme seu schema/pydantic
     return {
         "id": user.id,
         "email": user.email,
