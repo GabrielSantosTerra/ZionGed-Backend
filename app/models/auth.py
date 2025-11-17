@@ -38,3 +38,14 @@ class Usuario(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     pessoa: Mapped[Pessoa] = relationship("Pessoa", back_populates="usuarios")
+
+class TokenBlacklist(Base):
+    __tablename__ = "tb_blacklist"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    jti: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    data_insercao: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        nullable=False,
+    )

@@ -1,4 +1,3 @@
-# app/models/__init__.py
-from .auth import Pessoa, Usuario
+from .auth import Pessoa, Usuario, TokenBlacklist
 
-__all__ = ["Pessoa", "Usuario"]
+__all__ = ["Pessoa", "Usuario", "TokenBlacklist"]

@@ -1,16 +1,15 @@
-# from _future_ import annotations
 import re
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session, joinedload
 
 from pydantic import BaseModel, EmailStr
 
 from app.database.connection import get_db
-from app.models import Pessoa, Usuario
+from app.models import Pessoa, Usuario, TokenBlacklist
 from app.schemas.auth import RegisterIn, RegisterOut
 from app.security.password import hash_password, verify_password, create_access_token
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, _extract_token, COOKIE_CANDIDATES
 
 router = APIRouter()
 
@@ -101,7 +100,17 @@ def me(user: Usuario = Depends(get_current_user)):
     }
 
 @router.post("/logout")
-def logout(response: Response):
-    for name in ("session.xaccess", "access_token", "token"):
+def logout(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    token = _extract_token(request)
+    if token:
+        db.add(TokenBlacklist(jti=token))
+        db.commit()
+
+    for name in COOKIE_CANDIDATES:
         response.delete_cookie(key=name, path="/")
+
     return {"detail": "logged out"}
