@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database.connection import engine, Base
-from app.models.auth import Pessoa, Usuario  # garante que models carreguem
-from app.routes import api_router            # <- aqui!
+from app.models.auth import Pessoa, Usuario
+from app.models.document import Documento, Tag
+from app.routes import api_router
 
 Base.metadata.create_all(bind=engine)
 
