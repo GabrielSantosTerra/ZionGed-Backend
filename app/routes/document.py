@@ -1,5 +1,4 @@
 from datetime import datetime
-import base64
 from pathlib import Path
 import hashlib
 import secrets
@@ -9,6 +8,7 @@ from typing import Any
 
 import boto3
 from typing import Any, List, Optional
+from sqlalchemy import func
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
@@ -179,3 +179,30 @@ def download_document(
             "Content-Disposition": f'attachment; filename="{documento.filename}"'
         },
     )
+
+@router.get("/tags")
+def listar_tags_disponiveis(
+    cliente_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Retorna a lista de chaves de tags disponíveis no banco,
+    opcionalmente filtradas por cliente_id.
+    Exemplo de retorno:
+    { "tags": ["tipo", "cpf", "competencia"] }
+    """
+
+    query = db.query(Tag.chave).distinct()
+
+    if cliente_id is not None:
+        query = (
+            db.query(Tag.chave)
+            .join(Documento, Documento.id == Tag.documento_id)
+            .filter(Documento.cliente_id == cliente_id)
+            .distinct()
+        )
+
+    rows = query.order_by(Tag.chave).all()
+    tags = [row[0] for row in rows]
+
+    return {"tags": tags}
