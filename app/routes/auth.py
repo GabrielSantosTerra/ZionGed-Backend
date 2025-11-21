@@ -114,3 +114,35 @@ def logout(
         response.delete_cookie(key=name, path="/")
 
     return {"detail": "logged out"}
+
+@router.post("/refresh")
+def refresh_token(
+    response: Response,
+    user: Usuario = Depends(get_current_user),
+):
+    token = create_access_token(user.id)
+
+    response.set_cookie(
+        key="session.xaccess",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "pessoa": {
+                "id": user.pessoa.id,
+                "nome": user.pessoa.nome,
+                "cpf": user.pessoa.cpf,
+            }
+            if user.pessoa
+            else None,
+        },
+    }
