@@ -9,7 +9,7 @@ from typing import Any
 import boto3
 from typing import Any, List, Optional
 from sqlalchemy import func
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from pydantic import ValidationError
@@ -239,3 +239,36 @@ def update_document(
     db.refresh(documento)
 
     return documento
+
+@router.delete(
+    "/{uuid}/delete",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_document(
+    uuid: str,
+    db: Session = Depends(get_db),
+) -> Response:
+    documento = (
+        db.query(Documento)
+        .filter(Documento.uuid == uuid)
+        .first()
+    )
+
+    if not documento:
+        raise HTTPException(status_code=404, detail="Documento não encontrado.")
+
+    try:
+        s3_client.delete_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=documento.bucket_key,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Falha ao apagar arquivo no bucket: {e}",
+        )
+
+    db.delete(documento)
+    db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
