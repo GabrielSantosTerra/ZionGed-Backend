@@ -16,7 +16,7 @@ from pydantic import ValidationError
 
 from app.database.connection import get_db
 from app.models.document import Documento, Tag
-from app.schemas.document import DocumentoOut, DocumentoUploadMeta
+from app.schemas.document import DocumentoOut, DocumentoUploadMeta, DocumentoUpdate
 
 router = APIRouter()
 
@@ -206,3 +206,36 @@ def listar_tags_disponiveis(
     tags = [row[0] for row in rows]
 
     return {"tags": tags}
+
+@router.put(
+    "/{uuid}/update",
+    response_model=DocumentoOut,
+)
+def update_document(
+    uuid: str,
+    payload: DocumentoUpdate,
+    db: Session = Depends(get_db),
+) -> Any:
+    documento = (
+        db.query(Documento)
+        .options(joinedload(Documento.tags))
+        .filter(Documento.uuid == uuid)
+        .first()
+    )
+
+    if not documento:
+        raise HTTPException(status_code=404, detail="Documento não encontrado.")
+
+    if payload.filename is not None:
+        documento.filename = payload.filename
+
+    if payload.tags is not None:
+        documento.tags.clear()
+        for tag in payload.tags:
+            documento.tags.append(Tag(chave=tag.chave, valor=tag.valor))
+
+    db.add(documento)
+    db.commit()
+    db.refresh(documento)
+
+    return documento

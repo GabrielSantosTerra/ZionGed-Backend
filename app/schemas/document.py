@@ -39,3 +39,8 @@ class DocumentoOut(BaseModel):
 class DocumentoUploadMeta(BaseModel):
     cliente_id: int
     tags: List[TagCreate] = []
+
+
+class DocumentoUpdate(BaseModel):
+    filename: Optional[str] = None
+    tags: Optional[List[TagCreate]] = None
