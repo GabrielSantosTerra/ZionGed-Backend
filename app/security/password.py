@@ -7,6 +7,8 @@ from jose import jwt
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+REFRESH_TOKEN_EXPIRE_MINUTES = int(os.getenv("REFRESH_TOKEN_EXPIRE_MINUTES", str(60 * 24 * 30)))
+
 
 _ALG = "pbkdf2_sha256"
 _ITER = 200_000
@@ -39,7 +41,26 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 def create_access_token(subject: str | int, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = {"sub": str(subject)}
+    """
+    Gera um JWT de acesso curto, com claim "tipo" = "access".
+    """
+    to_encode = {
+        "sub": str(subject),
+        "tipo": "access",
+    }
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token(subject: str | int, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Gera um JWT de refresh, com claim "tipo" = "refresh" e duração maior.
+    """
+    to_encode = {
+        "sub": str(subject),
+        "tipo": "refresh",
+    }
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
